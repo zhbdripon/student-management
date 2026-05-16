@@ -10,6 +10,39 @@ datasource db {
   provider = "postgresql"
 }
 
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum EnrollmentStatus {
+  ENROLLED
+  DEFERRED
+  WITHDRAWN
+  COMPLETED
+}
+
+enum FileType {
+  PDF
+  DOCX
+}
+
+enum GradeClassification {
+  FAIL
+  PASS
+  MERIT
+  DISTINCTION
+}
+
+// ---------------------------------------------------------------------------
+// Better Auth tables (do NOT edit column names — managed by Better Auth)
+// Roles are managed via the organization plugin (stored in the `member` table).
+// Roles used in this app: "owner" | "admin" | "staff" | "member"
+//   owner  → Institution superuser (org creator)
+//   admin  → Registry Administrator
+//   staff  → Academic staff
+//   member → Student
+// ---------------------------------------------------------------------------
+
 model User {
   id            String    @id
   name          String
@@ -20,20 +53,28 @@ model User {
   updatedAt     DateTime
   sessions      Session[]
   accounts      Account[]
+  // Organization plugin relations
+  members     Member[]
+  invitations Invitation[] @relation("InvitationInviter")
+  // Application relations
+  student            Student?     @relation("UserStudent")
+  createdAssessments Assessment[] @relation("AssessmentCreatedBy")
+  gradedGrades       Grade[]      @relation("GradedByUser")
 
   @@map("user")
 }
 
 model Session {
-  id        String   @id
-  expiresAt DateTime
-  token     String   @unique
-  createdAt DateTime
-  updatedAt DateTime
-  ipAddress String?
-  userAgent String?
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String   @id
+  expiresAt            DateTime
+  token                String   @unique
+  createdAt            DateTime
+  updatedAt            DateTime
+  ipAddress            String?
+  userAgent            String?
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrganizationId String?
 
   @@map("session")
 }
@@ -66,4 +107,213 @@ model Verification {
   updatedAt  DateTime?
 
   @@map("verification")
+}
+
+// ---------------------------------------------------------------------------
+// Better Auth — Organization plugin tables
+// ---------------------------------------------------------------------------
+
+/// The single institution record. Created once by the first admin on setup.
+model Organization {
+  id          String       @id
+  name        String
+  slug        String       @unique
+  logo        String?
+  metadata    String?
+  createdAt   DateTime
+
+  members     Member[]
+  invitations Invitation[]
+
+  @@map("organization")
+}
+
+/// Links a user to an organization with a role.
+/// role is stored as a comma-separated string to support multiple roles.
+/// App roles: "owner" | "admin" | "staff" | "member"
+model Member {
+  id             String       @id
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           String
+  createdAt      DateTime
+
+  @@map("member")
+}
+
+/// Pending invitation for a user to join the organization.
+model Invitation {
+  id             String       @id
+  email          String
+  inviterId      String
+  inviter        User         @relation("InvitationInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           String?
+  status         String
+  createdAt      DateTime
+  expiresAt      DateTime
+
+  @@map("invitation")
+}
+
+// ---------------------------------------------------------------------------
+// Application models
+// ---------------------------------------------------------------------------
+
+/// Academic programme (e.g. "BSc Computer Science").
+/// feeAmount is the base tuition fee used when creating a FeeRecord for a student.
+model Programme {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  feeAmount   Decimal   @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  students Student[]
+  modules  Module[]
+
+  @@map("programme")
+}
+
+/// Student record created by Registry staff.
+/// studentId is auto-generated in application code: SMS-YYYY-XXXX.
+/// userId is optional — a student may have a login account or not yet.
+model Student {
+  id               String           @id @default(cuid())
+  /// Auto-generated unique ID, e.g. SMS-2025-0001
+  studentId        String           @unique
+  /// Optional link to an auth User account
+  userId           String?          @unique
+  user             User?            @relation("UserStudent", fields: [userId], references: [id], onDelete: SetNull)
+  fullName         String
+  email            String           @unique
+  dateOfBirth      DateTime         @db.Date
+  programmeId      String
+  programme        Programme        @relation(fields: [programmeId], references: [id])
+  /// Academic year string, e.g. "2025/2026"
+  academicYear     String
+  enrollmentStatus EnrollmentStatus @default(ENROLLED)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  feeRecord   FeeRecord?
+  submissions Submission[]
+  grades      Grade[]
+
+  @@map("student")
+}
+
+/// One fee record per student, seeded from programme.feeAmount.
+/// outstandingBalance is derived: totalAmount - SUM(payments.amount).
+/// A student is overdue when dueDate has passed and outstandingBalance > 0.
+model FeeRecord {
+  id          String   @id @default(cuid())
+  studentId   String   @unique
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  totalAmount Decimal  @db.Decimal(10, 2)
+  dueDate     DateTime @db.Date
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  payments PaymentTransaction[]
+
+  @@map("fee_record")
+}
+
+/// Individual payment made against a student's FeeRecord.
+model PaymentTransaction {
+  id              String    @id @default(cuid())
+  feeRecordId     String
+  feeRecord       FeeRecord @relation(fields: [feeRecordId], references: [id], onDelete: Cascade)
+  amount          Decimal   @db.Decimal(10, 2)
+  paidAt          DateTime  @db.Date
+  referenceNumber String    @unique
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("payment_transaction")
+}
+
+/// Academic module (unit of teaching) belonging to a Programme.
+model Module {
+  id          String     @id @default(cuid())
+  title       String
+  /// Short module code, e.g. "CS101"
+  code        String     @unique
+  programmeId String?
+  programme   Programme? @relation(fields: [programmeId], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  assessments Assessment[]
+
+  @@map("module")
+}
+
+/// Assessment created by staff within a Module.
+/// deadline controls whether a submission is on-time or late.
+model Assessment {
+  id          String   @id @default(cuid())
+  title       String
+  moduleId    String
+  module      Module   @relation(fields: [moduleId], references: [id])
+  deadline    DateTime
+  createdById String
+  createdBy   User     @relation("AssessmentCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  submissions Submission[]
+
+  @@map("assessment")
+}
+
+/// File submission by a student for an assessment.
+/// One submission per (assessment, student) pair — enforced by @@unique.
+/// isLate is set to true at creation time when submittedAt > assessment.deadline.
+/// Resubmission is allowed by updating this record (before the deadline).
+model Submission {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id])
+  studentId    String
+  student      Student    @relation(fields: [studentId], references: [id])
+  fileUrl      String
+  fileType     FileType
+  submittedAt  DateTime   @default(now())
+  isLate       Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  grade Grade?
+
+  @@unique([assessmentId, studentId])
+  @@map("submission")
+}
+
+/// Grade entered by staff for a submission.
+/// classification is derived from numericGrade and stored for quick reads:
+///   < 40 → FAIL | ≥ 40 → PASS | ≥ 60 → MERIT | ≥ 70 → DISTINCTION
+/// Students can only read this record when isPublished = true.
+model Grade {
+  id             String              @id @default(cuid())
+  submissionId   String              @unique
+  submission     Submission          @relation(fields: [submissionId], references: [id])
+  studentId      String
+  student        Student             @relation(fields: [studentId], references: [id])
+  numericGrade   Int
+  classification GradeClassification
+  isPublished    Boolean             @default(false)
+  publishedAt    DateTime?
+  gradedById     String
+  gradedBy       User                @relation("GradedByUser", fields: [gradedById], references: [id])
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@map("grade")
 }
