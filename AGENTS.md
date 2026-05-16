@@ -230,3 +230,98 @@ npm run lint     # Lint
 - **Regenerate types**: after schema changes run `prisma generate` to keep TypeScript types in sync.
 - **File naming**: use `kebab-case` for files and folders inside `src/app/`.
 - **Components**: place shared UI in `src/components/`, page-specific UI co-located with the page.
+- **Tailwind v4**: use `shrink-0` not `flex-shrink-0`, `grow` not `flex-grow`, etc. (shorthand-only utility names).
+
+---
+
+## Authorization Pattern
+
+> Do **not** use `auth.api.getActiveMember()` for role checks in pages or API routes — it requires `activeOrganizationId` to be set in the session, which may not always be the case.
+
+Instead, query the `member` table directly:
+
+```ts
+// In a Route Handler
+import { getAdminOrOwner } from "@/lib/auth-utils";
+
+const admin = await getAdminOrOwner(request.headers);
+if (!admin) return Response.json({ error: "Forbidden" }, { status: 403 });
+```
+
+```ts
+// In a Server Component / Layout
+import { requireAdminOrOwnerPage } from "@/lib/auth-utils";
+
+const { session, member } = await requireAdminOrOwnerPage();
+// Redirects to /sign-in if unauthenticated, to / if role is not owner/admin
+```
+
+`src/lib/auth-utils.ts` is the single source of truth for these helpers.
+
+---
+
+## Dashboard & Student Enrollment
+
+The admin dashboard lives at `/dashboard` and is protected to `owner` and `admin` roles only.
+
+### Route map
+
+| Route | Description |
+| ----- | ----------- |
+| `/dashboard` | Redirects to `/dashboard/students` |
+| `/dashboard/students` | Student list — search, filter by programme/status, paginate |
+| `/dashboard/students/new` | Enrol a new student |
+| `/dashboard/students/[id]` | View + edit an existing student |
+
+### API routes
+
+| Endpoint | Methods | Description |
+| -------- | ------- | ----------- |
+| `/api/students` | `GET`, `POST` | List (with `q`, `programmeId`, `status`, `page` params) / create |
+| `/api/students/[id]` | `GET`, `PATCH` | Fetch / partial-update a student |
+| `/api/programmes` | `GET` | List programmes (used to populate dropdowns) |
+
+### Student ID generation
+
+IDs follow the pattern `SMS-YYYY-XXXX` (e.g. `SMS-2026-0001`). Generation happens inside a `db.$transaction` to prevent race conditions when multiple students are enrolled concurrently. The transaction finds the highest existing ID for the current year and increments the sequence number.
+
+### Shared components
+
+| Component | Purpose |
+| --------- | ------- |
+| `src/components/dashboard/sidebar.tsx` | App shell sidebar — active state via `usePathname()`, future features shown as "Soon" |
+| `src/components/students/student-filters.tsx` | Search + programme/status dropdowns; updates URL params with `useTransition` |
+| `src/components/students/student-table.tsx` | Responsive table + `StatusBadge` (colour-coded per enrollment status) |
+| `src/components/students/student-form.tsx` | Shared create/edit form; accepts `mode="create" | "edit"` and `defaultValues` |
+
+### Prerequisite: programmes must exist
+
+`Student` requires a `Programme`. Before enrolling any students, at least one `Programme` row must exist in the DB. The UI shows a warning banner if none are found. When implementing programme management, use the same admin-only auth pattern.
+
+---
+
+## Database Error Handling
+
+All Prisma calls in API route handlers must go through `dbQuery` from `src/lib/db-error.ts` instead of raw `try/catch` blocks.
+
+```ts
+import { dbQuery } from "@/lib/db-error";
+
+const { data: student, response: err } = await dbQuery(
+  () => db.student.findUnique({ where: { id } }),
+  "GET /api/students/[id]",
+);
+if (err) return err; // returns the appropriate HTTP response
+```
+
+### What `dbQuery` handles
+
+| Prisma error code | HTTP response |
+| ----------------- | ------------- |
+| `P2002` — unique constraint | `409 Conflict` with a field-specific message |
+| `P2025` — record not found  | `404 Not Found` |
+| Any other error             | `500 Internal Server Error` (logged to console) |
+
+The second argument is a context string used in the server-side `console.error` log.
+
+`UNIQUE_CONSTRAINT_MESSAGES` in `db-error.ts` maps column names to user-facing messages — extend it when adding new unique fields.

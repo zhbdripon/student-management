@@ -25,7 +25,7 @@ export default function SignInPage() {
       return;
     }
 
-    router.push("/");
+    router.push("/dashboard");
   }
 
   return (
