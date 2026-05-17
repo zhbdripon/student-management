@@ -26,7 +26,6 @@ const navItems = [
         <line x1="1" y1="10" x2="23" y2="10" />
       </svg>
     ),
-    comingSoon: true,
   },
   {
     label: "Assessments",

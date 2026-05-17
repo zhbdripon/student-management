@@ -5,6 +5,8 @@ import { requireAdminOrOwnerPage } from "@/lib/auth-utils";
 import { StudentForm } from "@/components/students/student-form";
 import { StatusBadge } from "@/components/students/student-table";
 import type { EnrollmentStatus } from "@/components/students/student-table";
+import { FeeStatusBadge } from "@/components/fees/fee-status-badge";
+import { aggregateFeeRecords, formatCurrency } from "@/lib/fee-utils";
 
 export default async function StudentDetailPage({
   params,
@@ -19,6 +21,7 @@ export default async function StudentDetailPage({
       where: { id },
       include: {
         programme: { select: { id: true, name: true } },
+        feeRecords: { include: { payments: { select: { amount: true } } } },
       },
     }),
     db.programme.findMany({
@@ -38,6 +41,20 @@ export default async function StudentDetailPage({
     month: "long",
     year: "numeric",
   });
+
+  const today = new Date();
+  const { status: feeStatus, outstanding, totalPaid, totalAmount } =
+    aggregateFeeRecords(
+      student.feeRecords.map((fr) => ({
+        totalAmount: Number(fr.totalAmount),
+        dueDate: fr.dueDate,
+        payments: fr.payments.map((p) => ({
+          id: "",
+          amount: Number(p.amount),
+        })),
+      })),
+      today,
+    );
 
   return (
     <div className="px-6 py-8">
@@ -110,6 +127,74 @@ export default async function StudentDetailPage({
             <DetailCell label="Status">
               <StatusBadge status={student.enrollmentStatus as EnrollmentStatus} />
             </DetailCell>
+          </div>
+        </div>
+
+        {/* Fee status card */}
+        <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+          <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4 dark:border-zinc-800">
+            <div>
+              <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                Fees &amp; Payments
+              </h2>
+              <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
+                {feeStatus === "unassigned"
+                  ? "No fee record assigned yet"
+                  : `${formatCurrency(outstanding)} outstanding of ${formatCurrency(totalAmount)}`}
+              </p>
+            </div>
+            <Link
+              href={`/dashboard/fees/${student.id}`}
+              className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+            >
+              {feeStatus === "unassigned" ? "Assign Fees" : "Manage Fees"}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-3.5 w-3.5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </Link>
+          </div>
+          <div className="grid grid-cols-3 gap-px bg-zinc-100 dark:bg-zinc-800">
+            <div className="bg-white px-5 py-4 dark:bg-zinc-900">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+                Status
+              </p>
+              <div className="mt-1.5">
+                <FeeStatusBadge status={feeStatus} />
+              </div>
+            </div>
+            <div className="bg-white px-5 py-4 dark:bg-zinc-900">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+                Paid
+              </p>
+              <p className="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                {feeStatus !== "unassigned" ? formatCurrency(totalPaid) : "—"}
+              </p>
+            </div>
+            <div className="bg-white px-5 py-4 dark:bg-zinc-900">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+                Outstanding
+              </p>
+              <p
+                className={`mt-1 text-sm font-semibold ${
+                  feeStatus === "overdue"
+                    ? "text-red-600 dark:text-red-400"
+                    : feeStatus !== "unassigned"
+                      ? "text-zinc-900 dark:text-zinc-50"
+                      : "text-zinc-400"
+                }`}
+              >
+                {feeStatus !== "unassigned" ? formatCurrency(outstanding) : "—"}
+              </p>
+            </div>
           </div>
         </div>
 

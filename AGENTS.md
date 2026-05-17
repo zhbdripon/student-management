@@ -212,7 +212,70 @@ const students = await db.student.findMany();
 
 ---
 
-## Development Workflow
+## Fees & Payments
+
+The fees module lives at `/dashboard/fees` and is restricted to `owner` and `admin` roles.
+
+### Fee status lifecycle
+
+| Status        | Condition                                                        |
+| ------------- | ---------------------------------------------------------------- |
+| `unassigned`  | Student has no `FeeRecord` yet                                   |
+| `pending`     | `FeeRecord` exists, outstanding > 0, due date not yet passed     |
+| `partial`     | Some payments made, outstanding > 0, due date not yet passed     |
+| `overdue`     | Outstanding > 0 and due date has passed                          |
+| `paid`        | Outstanding balance = 0                                          |
+
+Outstanding balance is **computed in application code** — not stored. It is derived as `totalAmount - SUM(payments.amount)`.
+
+### Route map
+
+| Route | Description |
+| ----- | ----------- |
+| `/dashboard/fees` | Fees overview — all students with stats, filters, overdue flags |
+| `/dashboard/fees/[studentId]` | Student fee detail — summary, progress bar, payment history, add payment |
+
+### API routes
+
+| Endpoint | Methods | Description |
+| -------- | ------- | ----------- |
+| `/api/fees` | `GET`, `POST` | List students with fee data / initialise a fee record |
+| `/api/fees/[studentId]` | `GET`, `PATCH` | Get fee detail / update due date |
+| `/api/fees/[studentId]/payments` | `POST` | Record a payment |
+| `/api/fees/[studentId]/payments/[paymentId]` | `DELETE` | Remove a payment |
+
+### Fee initialisation
+
+Fees are **not** auto-created on student enrolment. An admin visits `/dashboard/fees/[studentId]` or clicks "Assign" in the fees table. The `totalAmount` is copied from `student.programme.feeAmount`; the admin sets the `dueDate`. Only one `FeeRecord` per student is allowed (`@@unique`).
+
+### Reference number generation
+
+The client auto-generates a reference in the format `PAY-YYYYMMDD-XXXX` (e.g. `PAY-20260517-4321`). The admin can override it. Uniqueness is enforced at the DB level; `dbQuery` surfaces a `409` conflict if a duplicate is submitted.
+
+### Shared utilities
+
+`src/lib/fee-utils.ts` contains:
+- `computeFeeStatus(feeRecord, today)` — returns `{ status, totalPaid, totalAmount, outstanding }`
+- `formatCurrency(value)` — GBP currency formatter
+- `FEE_STATUS_LABELS` — display strings for each status
+
+### Shared components
+
+| Component | Purpose |
+| --------- | ------- |
+| `src/components/fees/fee-status-badge.tsx` | Colour-coded badge for each fee status |
+| `src/components/fees/fee-table.tsx` | Sortable overview table with "Manage/Assign" links |
+| `src/components/fees/fee-filters.tsx` | Search + programme + status dropdowns (URL-driven) |
+| `src/components/fees/initialize-fee-form.tsx` | Client form to create a FeeRecord for a student |
+| `src/components/fees/payment-form.tsx` | Client form to record a PaymentTransaction |
+| `src/components/fees/payments-table.tsx` | Payment history table with delete action |
+| `src/components/fees/edit-due-date-form.tsx` | Inline edit for the due date on the fee detail page |
+
+### Student detail integration
+
+The student detail page (`/dashboard/students/[id]`) shows a compact fee summary card (status, paid, outstanding) with a link to the full fees page.
+
+---
 
 ```bash
 npm install      # Install dependencies

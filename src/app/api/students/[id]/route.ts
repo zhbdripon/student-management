@@ -20,7 +20,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         where: { id },
         include: {
           programme: { select: { id: true, name: true } },
-          feeRecord: {
+          feeRecords: {
             include: { payments: { orderBy: { paidAt: "desc" } } },
           },
         },

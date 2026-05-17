@@ -200,20 +200,22 @@ model Student {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  feeRecord   FeeRecord?
+  feeRecords  FeeRecord[]
   submissions Submission[]
   grades      Grade[]
 
   @@map("student")
 }
 
-/// One fee record per student, seeded from programme.feeAmount.
-/// outstandingBalance is derived: totalAmount - SUM(payments.amount).
-/// A student is overdue when dueDate has passed and outstandingBalance > 0.
+/// Fee record assigned to a student. A student may have multiple fee records
+/// (e.g. tuition, accommodation, late fees). Each has its own amount and due date.
+/// outstandingBalance per record is derived: totalAmount - SUM(payments.amount).
 model FeeRecord {
   id          String   @id @default(cuid())
-  studentId   String   @unique
+  studentId   String
   student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// Short label describing this fee, e.g. "Tuition 2025/2026"
+  label       String
   totalAmount Decimal  @db.Decimal(10, 2)
   dueDate     DateTime @db.Date
   createdAt   DateTime @default(now())
