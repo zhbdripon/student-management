@@ -62,12 +62,12 @@ export default function Home() {
               >
                 Sign in
               </Link>
-              <Link
+              {/* <Link
                 href="/sign-up"
                 className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-2 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
                 Sign up
-              </Link>
+              </Link> */}
             </div>
           </>
         )}
