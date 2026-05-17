@@ -1,4 +1,4 @@
-import { requireAdminOrOwnerPage } from "@/lib/auth-utils";
+import { requireAnyMemberPage } from "@/lib/auth-utils";
 import { Sidebar } from "@/components/dashboard/sidebar";
 
 export default async function DashboardLayout({
@@ -6,7 +6,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { session, member } = await requireAdminOrOwnerPage();
+  const { session, member } = await requireAnyMemberPage();
 
   return (
     <div className="flex h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-950">

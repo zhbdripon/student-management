@@ -321,17 +321,28 @@ const { session, member } = await requireAdminOrOwnerPage();
 
 `src/lib/auth-utils.ts` is the single source of truth for these helpers.
 
+### Full list of auth helpers
+
+| Helper | Use in | Allowed roles | Redirect on failure |
+| ------ | ------ | ------------- | ------------------- |
+| `getAdminOrOwner(headers)` | Route handlers | `owner`, `admin` | returns `null` |
+| `requireAdminOrOwnerPage()` | Server pages | `owner`, `admin` | `/sign-in` or `/` |
+| `getStaffOrAdminOrOwner(headers)` | Route handlers | `owner`, `admin`, `staff` | returns `null` |
+| `requireStaffOrAdminOrOwnerPage()` | Server pages | `owner`, `admin`, `staff` | `/sign-in` or `/` |
+| `getAnyAuthenticatedMember(headers)` | Route handlers | any authenticated | returns `null` |
+| `requireAnyMemberPage()` | Server pages | any authenticated | `/sign-in` |
+
 ---
 
 ## Dashboard & Student Enrollment
 
-The admin dashboard lives at `/dashboard` and is protected to `owner` and `admin` roles only.
+The admin dashboard lives at `/dashboard` and is accessible to all authenticated roles. Registry-only pages (`/students`, `/fees`) redirect non-admin/owner users away.
 
 ### Route map
 
 | Route | Description |
 | ----- | ----------- |
-| `/dashboard` | Redirects to `/dashboard/students` |
+| `/dashboard` | Role-based redirect — `owner`/`admin` → `/dashboard/students`; `staff`/`member` → `/dashboard/assessments` |
 | `/dashboard/students` | Student list — search, filter by programme/status, paginate |
 | `/dashboard/students/new` | Enrol a new student |
 | `/dashboard/students/[id]` | View + edit an existing student |
@@ -352,7 +363,7 @@ IDs follow the pattern `SMS-YYYY-XXXX` (e.g. `SMS-2026-0001`). Generation happen
 
 | Component | Purpose |
 | --------- | ------- |
-| `src/components/dashboard/sidebar.tsx` | App shell sidebar — active state via `usePathname()`, future features shown as "Soon" |
+| `src/components/dashboard/sidebar.tsx` | App shell sidebar — role-filtered nav items, role-coloured badge, portal label |
 | `src/components/students/student-filters.tsx` | Search + programme/status dropdowns; updates URL params with `useTransition` |
 | `src/components/students/student-table.tsx` | Responsive table + `StatusBadge` (colour-coded per enrollment status) |
 | `src/components/students/student-form.tsx` | Shared create/edit form; accepts `mode="create" | "edit"` and `defaultValues` |
@@ -360,6 +371,90 @@ IDs follow the pattern `SMS-YYYY-XXXX` (e.g. `SMS-2026-0001`). Generation happen
 ### Prerequisite: programmes must exist
 
 `Student` requires a `Programme`. Before enrolling any students, at least one `Programme` row must exist in the DB. The UI shows a warning banner if none are found. When implementing programme management, use the same admin-only auth pattern.
+
+---
+
+## Assessment Submission
+
+Assessments are created by staff. Students upload a shareable file URL (Google Drive, Dropbox etc.) against an open assessment. One submission per student per assessment; resubmission is allowed before the deadline. Late submissions are accepted but flagged.
+
+### Route map
+
+| Route | Description |
+| ----- | ----------- |
+| `/dashboard/assessments` | Assessment list — role-based view (student: open/past with submission status; staff/registry: table with counts) |
+| `/dashboard/assessments/new` | Create a new assessment (**staff only** — other roles are redirected away) |
+| `/dashboard/assessments/[id]` | Assessment detail — submission form (student) or submissions table with marksheet link (staff/registry) |
+
+### API routes
+
+| Endpoint | Methods | Description |
+| -------- | ------- | ----------- |
+| `/api/modules` | `GET` | List modules with programme info (any authenticated user) |
+| `/api/assessments` | `GET`, `POST` | List (role-filtered) / create (**staff only**) |
+| `/api/assessments/[id]` | `GET`, `PATCH`, `DELETE` | Detail / update / delete (admin/owner only) |
+| `/api/assessments/[id]/submissions` | `GET`, `POST` | List (role-filtered) / submit (member only) |
+| `/api/assessments/[id]/submissions/[submissionId]` | `PATCH` | Resubmit before deadline (member, own submission only) |
+
+### Submission rules
+
+- One submission per student per assessment (`@@unique([assessmentId, studentId])`).
+- Resubmission allowed only if `submittedAt <= assessment.deadline`; returns `422` otherwise.
+- `isLate` is computed at creation: `submittedAt > assessment.deadline`.
+- File submission is URL-based — `fileUrl` + `fileType` (PDF | DOCX). No file storage backend.
+
+### Shared components
+
+| Component | Purpose |
+| --------- | ------- |
+| `src/components/assessments/assessment-form.tsx` | Create assessment (staff only); programme dropdown filters module list; no inline module creation |
+| `src/components/assessments/submission-form.tsx` | Student submit / resubmit form with late detection |
+| `src/components/assessments/submissions-table.tsx` | Staff/registry view of all submissions with grade + publish status |
+
+---
+
+## Marksheet & Results
+
+Staff enter numeric grades (0–100) per submission. Classification is derived automatically. Staff can publish or withhold results per student. Students see only their published grades.
+
+### Route map
+
+| Route | Description |
+| ----- | ----------- |
+| `/dashboard/marksheet` | Overview — student: own published grades with stats; staff/registry: all assessments with grading progress |
+| `/dashboard/marksheet/[assessmentId]` | Per-assessment grade entry (staff) or read-only view (admin/owner); students are redirected to overview |
+
+### API routes
+
+| Endpoint | Methods | Description |
+| -------- | ------- | ----------- |
+| `/api/grades` | `GET`, `POST` | List (role-filtered) / create (**staff only**) |
+| `/api/grades/[id]` | `PATCH` | Update `numericGrade` (re-classifies) and/or `isPublished` (**staff only**) |
+
+### Classification rules
+
+Implemented in `src/lib/grade-utils.ts`:
+
+| Grade | Classification |
+| ----- | -------------- |
+| < 40  | FAIL |
+| ≥ 40  | PASS |
+| ≥ 60  | MERIT |
+| ≥ 70  | DISTINCTION |
+
+### Visibility
+
+- `isPublished: false` by default on creation.
+- Students query `grade` filtered by `isPublished: true` — unpublished grades are invisible to them.
+- Staff toggle publish/withhold per student via PATCH `/api/grades/[id]` with `{ isPublished: bool }`.
+- `publishedAt` is set when `isPublished` becomes `true`; cleared when it becomes `false`.
+
+### Shared components
+
+| Component | Purpose |
+| --------- | ------- |
+| `src/components/marksheet/marksheet-table.tsx` | Interactive grade entry table — inline number input, save/cancel; **Visibility** column: static Published/Withheld badge (always shown); **Actions** column: Publish/Withhold toggle button + graded-by name (staff only, hidden in `readOnly` mode) |
+| `src/lib/grade-utils.ts` | `classifyGrade()`, `CLASSIFICATION_LABELS`, `CLASSIFICATION_BADGE_CLASSES` — used across marksheet table and the assessment detail grade card |
 
 ---
 

@@ -4,10 +4,20 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "@/lib/auth-client";
 
-const navItems = [
+type Role = "owner" | "admin" | "staff" | "member" | string;
+
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ReactNode;
+  roles: Role[];
+}
+
+const navItems: NavItem[] = [
   {
     label: "Students",
     href: "/dashboard/students",
+    roles: ["owner", "admin"],
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -20,6 +30,7 @@ const navItems = [
   {
     label: "Fees & Payments",
     href: "/dashboard/fees",
+    roles: ["owner", "admin"],
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
@@ -30,6 +41,7 @@ const navItems = [
   {
     label: "Assessments",
     href: "/dashboard/assessments",
+    roles: ["owner", "admin", "staff", "member"],
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -39,19 +51,39 @@ const navItems = [
         <polyline points="10 9 9 9 8 9" />
       </svg>
     ),
-    comingSoon: true,
   },
   {
     label: "Marksheet",
     href: "/dashboard/marksheet",
+    roles: ["owner", "admin", "staff", "member"],
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
       </svg>
     ),
-    comingSoon: true,
   },
 ];
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: "Registry (Owner)",
+  admin: "Registry (Admin)",
+  staff: "Staff",
+  member: "Student",
+};
+
+const ROLE_BADGE_CLASSES: Record<string, string> = {
+  owner: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
+  admin: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
+  staff: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
+  member: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
+};
+
+const PORTAL_LABEL: Record<string, string> = {
+  owner: "Registry",
+  admin: "Registry",
+  staff: "Staff Portal",
+  member: "Student Portal",
+};
 
 interface SidebarProps {
   userName: string;
@@ -59,7 +91,7 @@ interface SidebarProps {
   role: string;
 }
 
-export function Sidebar({ userName, userEmail, role }: SidebarProps) {
+export function Sidebar({ userName, userEmail: _userEmail, role }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -69,7 +101,10 @@ export function Sidebar({ userName, userEmail, role }: SidebarProps) {
     });
   }
 
-  const roleLabel = role === "owner" ? "Owner" : "Admin";
+  const roleLabel = ROLE_LABELS[role] ?? role;
+  const badgeClass = ROLE_BADGE_CLASSES[role] ?? "bg-zinc-100 text-zinc-700";
+  const portalLabel = PORTAL_LABEL[role] ?? "Portal";
+  const visibleItems = navItems.filter((item) => item.roles.includes(role));
 
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
@@ -82,7 +117,7 @@ export function Sidebar({ userName, userEmail, role }: SidebarProps) {
           <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
             Student Management
           </p>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">Registry</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">{portalLabel}</p>
         </div>
       </div>
 
@@ -91,32 +126,21 @@ export function Sidebar({ userName, userEmail, role }: SidebarProps) {
         <p className="px-2 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
           Menu
         </p>
-        {navItems.map((item) => {
+        {visibleItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
-            <div key={item.href}>
-              {item.comingSoon ? (
-                <div className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-zinc-400 dark:text-zinc-600 cursor-not-allowed">
-                  <span className="text-zinc-300 dark:text-zinc-700">{item.icon}</span>
-                  <span>{item.label}</span>
-                  <span className="ml-auto rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">
-                    Soon
-                  </span>
-                </div>
-              ) : (
-                <Link
-                  href={item.href}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
-                  }`}
-                >
-                  <span className={isActive ? "opacity-90" : "opacity-60"}>{item.icon}</span>
-                  {item.label}
-                </Link>
-              )}
-            </div>
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                isActive
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+              }`}
+            >
+              <span className={isActive ? "opacity-90" : "opacity-60"}>{item.icon}</span>
+              {item.label}
+            </Link>
           );
         })}
       </nav>
@@ -134,7 +158,7 @@ export function Sidebar({ userName, userEmail, role }: SidebarProps) {
               {userName}
             </p>
             <div className="flex items-center gap-1.5">
-              <span className="inline-block rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
+              <span className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${badgeClass}`}>
                 {roleLabel}
               </span>
             </div>
@@ -155,3 +179,4 @@ export function Sidebar({ userName, userEmail, role }: SidebarProps) {
     </aside>
   );
 }
+

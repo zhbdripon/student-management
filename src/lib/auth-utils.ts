@@ -44,3 +44,69 @@ export async function getAdminOrOwner(requestHeaders: Headers) {
   if (!member) return null;
   return { session, member };
 }
+
+/**
+ * Used in Route Handlers.
+ * Returns { session, member } for any authenticated member (any role), or null.
+ */
+export async function getAnyAuthenticatedMember(requestHeaders: Headers) {
+  const session = await auth.api.getSession({ headers: requestHeaders });
+  if (!session) return null;
+
+  const member = await db.member.findFirst({
+    where: { userId: session.user.id },
+  });
+
+  if (!member) return null;
+  return { session, member };
+}
+
+/**
+ * Used in Server Components (pages/layouts).
+ * Redirects to /sign-in if not authenticated.
+ * Returns { session, member } for any authenticated member.
+ */
+export async function requireAnyMemberPage() {
+  const session = await getServerSession();
+  if (!session) redirect("/sign-in");
+
+  const member = await db.member.findFirst({
+    where: { userId: session.user.id },
+  });
+
+  if (!member) redirect("/sign-in");
+  return { session, member };
+}
+
+/**
+ * Used in Route Handlers.
+ * Returns { session, member } for staff, admin, or owner, or null.
+ */
+export async function getStaffOrAdminOrOwner(requestHeaders: Headers) {
+  const session = await auth.api.getSession({ headers: requestHeaders });
+  if (!session) return null;
+
+  const member = await db.member.findFirst({
+    where: { userId: session.user.id, role: { in: ["owner", "admin", "staff"] } },
+  });
+
+  if (!member) return null;
+  return { session, member };
+}
+
+/**
+ * Used in Server Components (pages/layouts).
+ * Redirects to /sign-in if not authenticated.
+ * Redirects to / if not staff/admin/owner.
+ */
+export async function requireStaffOrAdminOrOwnerPage() {
+  const session = await getServerSession();
+  if (!session) redirect("/sign-in");
+
+  const member = await db.member.findFirst({
+    where: { userId: session.user.id, role: { in: ["owner", "admin", "staff"] } },
+  });
+
+  if (!member) redirect("/");
+  return { session, member };
+}
