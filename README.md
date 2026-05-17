@@ -1,5 +1,7 @@
 # Student Management System
 
+![Dashboard Preview](public/preview.png)
+
 A full-stack web application for managing student enrolment, fees, assessments, submissions, and grading within a university setting. Built with a role-based access model that separates the concerns of registry administrators, academic staff, and students.
 
 ---
@@ -123,41 +125,39 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Seeded Accounts
 
-All seeded accounts use the password: **`Password123!`**
-
 ### Organization
 
 | Name | Slug |
 |------|------|
 | Greenfield University | `greenfield-university` |
 
-### Owner
+### Owner (Registry Administrator)
 
-| Name | Email |
-|------|-------|
-| Sarah Mitchell | `owner@university.ac.uk` |
+| Name | Email | Password |
+|------|-------|----------|
+| Sarah Mitchell | `owner@university.ac.uk` | `Password123!` |
 
 ### Admin (Registry Administrator)
 
-| Name | Email |
-|------|-------|
-| James Harrison | `admin@university.ac.uk` |
+| Name | Email | Password |
+|------|-------|----------|
+| James Harrison | `admin@university.ac.uk` | `Password123!` |
 
 ### Staff (Academic Staff)
 
-| Name | Email |
-|------|-------|
-| Dr. Emily Clarke | `staff@university.ac.uk` |
+| Name | Email | Password |
+|------|-------|----------|
+| Dr. Emily Clarke | `staff@university.ac.uk` | `Password123!` |
 
 ### Students
 
-| Name | Email | Programme |
-|------|-------|-----------|
-| Alice Thompson | `alice.thompson@student.ac.uk` | BSc Computer Science |
-| Ben Okafor | `ben.okafor@student.ac.uk` | BSc Computer Science |
-| Chloe Patel | `chloe.patel@student.ac.uk` | BSc Computer Science |
-| Daniel Nguyen | `daniel.nguyen@student.ac.uk` | BSc Data Science and Analytics |
-| Emma Rossi | `emma.rossi@student.ac.uk` | BSc Data Science and Analytics |
+| Name | Email | Password | Programme |
+|------|-------|----------|-----------|
+| Alice Thompson | `alice.thompson@student.ac.uk` | `Password123!` | BSc Computer Science |
+| Ben Okafor | `ben.okafor@student.ac.uk` | `Password123!` | BSc Computer Science |
+| Chloe Patel | `chloe.patel@student.ac.uk` | `Password123!` | BSc Computer Science |
+| Daniel Nguyen | `daniel.nguyen@student.ac.uk` | `Password123!` | BSc Data Science and Analytics |
+| Emma Rossi | `emma.rossi@student.ac.uk` | `Password123!` | BSc Data Science and Analytics |
 
 ---
 
